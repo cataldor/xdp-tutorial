@@ -50,15 +50,13 @@ static int reuse_maps(struct bpf_object *obj, const char *path)
 	return 0;
 }
 
-#if 0
-struct bpf_object *load_bpf_object_file_reuse_maps(const char *file,
-						   int ifindex,
+struct bpf_object *open_bpf_object_file_reuse_maps(const char *file,
 						   const char *pin_dir)
 {
 	int err;
 	struct bpf_object *obj;
 
-	obj = open_bpf_object(file, ifindex);
+	obj = bpf_object__open(file);
 	if (!obj) {
 		fprintf(stderr, "ERR: failed to open object %s\n", file);
 		return NULL;
@@ -71,16 +69,8 @@ struct bpf_object *load_bpf_object_file_reuse_maps(const char *file,
 		return NULL;
 	}
 
-	err = bpf_object__load(obj);
-	if (err) {
-		fprintf(stderr, "ERR: loading BPF-OBJ file(%s) (%d): %s\n",
-			file, err, strerror(-err));
-		return NULL;
-	}
-
 	return obj;
 }
-#endif
 
 struct xdp_program *load_bpf_and_xdp_attach(struct config *cfg)
 {
