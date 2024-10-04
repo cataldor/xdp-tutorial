@@ -138,7 +138,47 @@ int main(int argc, char **argv)
 		/* return xdp_link_detach(cfg.ifindex, cfg.xdp_flags, 0); */
 	}
 
-	program = load_bpf_and_xdp_attach(&cfg);
+	if (cfg.reuse_maps) {
+		struct bpf_object *robj;
+		char errmsg[1024];
+		DECLARE_LIBXDP_OPTS(xdp_program_opts, xdp_opts, 0);
+
+		(void)snprintf(cfg.pin_dir, PATH_MAX, "%s/%s", pin_basedir, cfg.ifname);
+		robj = open_bpf_object_file_reuse_maps(cfg.filename, cfg.pin_dir);
+		if (robj == NULL) {
+			fprintf(stderr, "ERR: failed to load object with reuse map");
+			return EXIT_FAIL_BPF;
+		}
+		/* we cannot load bpf obj here */
+		/* otherwise bpf_program__set_target_attach() fails */
+
+		xdp_opts.prog_name = cfg.progname;
+		xdp_opts.obj = robj;
+		program = xdp_program__create(&xdp_opts);
+		err = libxdp_get_error(program);
+		if (err) {
+			libxdp_strerror(err, errmsg, sizeof(errmsg));
+			fprintf(stderr, "ERR: failed to find object with reuse map: %s", errmsg);
+			return EXIT_FAIL_BPF;
+		}
+
+		/* will call xdp_program__load, which will load the object */
+		err = xdp_program__attach(program, cfg.ifindex, cfg.attach_mode, 0);
+		if (err) {
+			fprintf(stderr, "ERR: failed to attach program with reuse map");
+			return EXIT_FAIL_BPF;
+		}
+	} else {
+		program = load_bpf_and_xdp_attach(&cfg);
+
+		/* Use the --dev name as subdir for exporting/pinning maps */
+		err = pin_maps_in_bpf_object(xdp_program__bpf_obj(program), cfg.ifname);
+		if (err) {
+			fprintf(stderr, "ERR: pinning maps\n");
+			return err;
+		}
+	}
+
 	if (!program)
 		return EXIT_FAIL_BPF;
 
@@ -147,13 +187,6 @@ int main(int argc, char **argv)
 		       cfg.filename, cfg.progname);
 		printf(" - XDP prog attached on device:%s(ifindex:%d)\n",
 		       cfg.ifname, cfg.ifindex);
-	}
-
-	/* Use the --dev name as subdir for exporting/pinning maps */
-	err = pin_maps_in_bpf_object(xdp_program__bpf_obj(program), cfg.ifname);
-	if (err) {
-		fprintf(stderr, "ERR: pinning maps\n");
-		return err;
 	}
 
 	return EXIT_OK;

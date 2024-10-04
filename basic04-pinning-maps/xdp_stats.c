@@ -25,6 +25,18 @@ static const char *__doc__ = "XDP stats program\n"
 #include "../common/common_user_bpf_xdp.h"
 #include "common_kern_user.h"
 
+#ifndef PATH_MAX
+#define PATH_MAX	4096
+#endif
+
+const char *pin_basedir =  "/sys/fs/bpf";
+__u32 saved_map_id;
+struct config cfg = {
+	.ifindex   = -1,
+	.do_unload = false,
+};
+
+
 static const struct option_wrapper long_options[] = {
 	{{"help",        no_argument,		NULL, 'h' },
 	 "Show help", false},
@@ -191,6 +203,37 @@ static void stats_collect(int map_fd, __u32 map_type,
 	}
 }
 
+static int swapped_bpf_map_if_changed(int *map_fd)
+{
+	struct bpf_map_info info = { 0 };
+	char pin_dir[PATH_MAX];
+	int len;
+	int fd;
+
+	/* Use the --dev name as subdir for finding pinned maps */
+	len = snprintf(pin_dir, PATH_MAX, "%s/%s", pin_basedir, cfg.ifname);
+	if (len < 0) {
+		fprintf(stderr, "ERR: creating pin dirname\n");
+		return 0;
+	}
+
+	fd = open_bpf_map_file(pin_dir, "xdp_stats_map", &info);
+	if (fd < 0)
+		return 0;
+
+	if (saved_map_id == info.id)
+		goto end;
+
+	printf("swapping xdp_stats_map for the new one (%d) -> (%d)\n",
+		*map_fd, fd);
+	(void)close(*map_fd);
+	*map_fd = fd;
+	return 1;
+end:
+	(void)close(fd);
+	return 0;
+}
+
 static void stats_poll(int map_fd, __u32 map_type, int interval)
 {
 	struct stats_record prev, record = { 0 };
@@ -207,14 +250,10 @@ static void stats_poll(int map_fd, __u32 map_type, int interval)
 		stats_collect(map_fd, map_type, &record);
 		stats_print(&record, &prev);
 		sleep(interval);
+		if (swapped_bpf_map_if_changed(&map_fd))
+			bzero(&record, sizeof(record));
 	}
 }
-
-#ifndef PATH_MAX
-#define PATH_MAX	4096
-#endif
-
-const char *pin_basedir =  "/sys/fs/bpf";
 
 int main(int argc, char **argv)
 {
@@ -224,11 +263,6 @@ int main(int argc, char **argv)
 	int stats_map_fd;
 	int interval = 2;
 	int len, err;
-
-	struct config cfg = {
-		.ifindex   = -1,
-		.do_unload = false,
-	};
 
 	/* Cmdline options can change progname */
 	parse_cmdline_args(argc, argv, long_options, &cfg, __doc__);
@@ -269,6 +303,7 @@ int main(int argc, char **argv)
 		       info.key_size, info.value_size, info.max_entries
 		       );
 	}
+	saved_map_id = info.id;
 
 	stats_poll(stats_map_fd, info.type, interval);
 	return EXIT_OK;

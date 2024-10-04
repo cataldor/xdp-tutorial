@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 #include <linux/bpf.h>
 #include <bpf/bpf_helpers.h>
+#include <xdp/xdp_helpers.h>
 
 #include "common_kern_user.h" /* defines: struct datarec; */
 
@@ -48,6 +49,16 @@ __u32 xdp_stats_record_action(struct xdp_md *ctx, __u32 action)
 
 	return action;
 }
+
+struct {
+	__uint(priority, 10);
+	__uint(XDP_PASS, 0);
+} XDP_RUN_CONFIG(xdp_pass_func);
+
+struct {
+	__uint(priority, 99);
+	__uint(XDP_PASS, 1);
+} XDP_RUN_CONFIG(xdp_drop_func);
 
 SEC("xdp")
 int  xdp_pass_func(struct xdp_md *ctx)
