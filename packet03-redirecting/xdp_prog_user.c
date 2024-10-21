@@ -50,10 +50,49 @@ static const struct option_wrapper long_options[] = {
 	{{0, 0, NULL,  0 }, NULL, false}
 };
 
+static int hex2num(char c)
+{
+	if (c >= '0' && c <= '9')
+		return c - '0';
+	if (c >= 'a' && c <= 'f')
+		return c - 'a' + 10;
+	if (c >= 'A' && c <= 'F')
+		return c - 'A' + 10;
+	return -1;
+}
+
+
+static int hex2byte(const char *hex)
+{
+	int a, b;
+
+	a = hex2num(*hex++);
+	if (a < 0)
+		return -1;
+
+	b = hex2num(*hex++);
+	if (b < 0)
+		return -1;
+	return (a << 4) | b;
+}
+
 static int parse_mac(char *str, unsigned char mac[ETH_ALEN])
 {
 	/* Assignment 3: parse a MAC address in this function and place the
 	 * result in the mac array */
+	size_t i;
+
+	for (i = 0; i < ETH_ALEN; i++) {
+		int a;
+
+		a = hex2byte(str);
+		if (a < 0)
+			return -1;
+		str += 2;
+		mac[i] = a;
+		if (i < ETH_ALEN - 1 && *str++ != ':')
+			return -1;
+	}
 
 	return 0;
 }
@@ -69,8 +108,7 @@ static int write_iface_params(int map_fd, unsigned char *src, unsigned char *des
 
 	printf("forward: %02x:%02x:%02x:%02x:%02x:%02x -> %02x:%02x:%02x:%02x:%02x:%02x\n",
 			src[0], src[1], src[2], src[3], src[4], src[5],
-			dest[0], dest[1], dest[2], dest[3], dest[4], dest[5]
-	      );
+			dest[0], dest[1], dest[2], dest[3], dest[4], dest[5]);
 
 	return 0;
 }
@@ -125,7 +163,9 @@ int main(int argc, char **argv)
 
 
 	/* Assignment 3: open the tx_port map corresponding to the cfg.ifname interface */
-	map_fd = -1;
+	map_fd = open_bpf_map_file(pin_dir, "tx_port", NULL);
+	if (map_fd < 0)
+		return EXIT_FAIL_BPF;
 
 	printf("map dir: %s\n", pin_dir);
 
@@ -136,7 +176,9 @@ int main(int argc, char **argv)
 		printf("redirect from ifnum=%d to ifnum=%d\n", cfg.ifindex, cfg.redirect_ifindex);
 
 		/* Assignment 3: open the redirect_params map corresponding to the cfg.ifname interface */
-		map_fd = -1;
+		map_fd = open_bpf_map_file(pin_dir, "redirect_params", NULL);
+		if (map_fd < 0)
+			return EXIT_FAIL_BPF;
 
 		/* Setup the mapping containing MAC addresses */
 		if (write_iface_params(map_fd, src, dest) < 0) {
