@@ -195,16 +195,16 @@ static struct bpf_object* load_bpf_and_trace_attach(struct config *cfg)
 
 	err = bpf_object__load(obj);
 	if (err) {
-			fprintf(stderr, "ERR: loading BPF-OBJ file(%s) (%d): %s\n",
-					cfg->filename, err, strerror(-err));
-			goto err;
+		fprintf(stderr, "ERR: loading BPF-OBJ file(%s) (%d): %s\n",
+				cfg->filename, err, strerror(-err));
+		goto err;
 	}
 
 	prog = bpf_object__next_program(obj, NULL);
 	if (!prog) {
-			fprintf(stderr, "ERR: Failed to retrieve program from BPF-OBJ file(%s) (%d): %s\n",
-					cfg->filename, err, strerror(-err));
-			goto err;
+		fprintf(stderr, "ERR: Failed to retrieve program from BPF-OBJ file(%s) (%d): %s\n",
+				cfg->filename, err, strerror(-err));
+		goto err;
 	}
 
 	link = bpf_program__attach_tracepoint(prog, "xdp", "xdp_exception");
@@ -266,8 +266,7 @@ int main(int argc, char **argv)
 		printf(" - BPF map (bpf_map_type:%d) id:%d name:%s"
 		       " key_size:%d value_size:%d max_entries:%d\n",
 		       info.type, info.id, info.name,
-		       info.key_size, info.value_size, info.max_entries
-		       );
+		       info.key_size, info.value_size, info.max_entries);
 	}
 
 	stats_poll(stats_map_fd, info.type, interval);
